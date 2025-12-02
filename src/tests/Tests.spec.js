@@ -4,56 +4,49 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 
-export const getDurationTrend = new Trend('get_duration_trend', true);
-export const statusCodeRate = new Rate('status_code_rate');
+export const getContactsDuration = new Trend('get_contacts', true);
+export const RateContentOK = new Rate('content_OK');
 
 export const options = {
-  thresholds: {
-    http_req_failed: ['rate<0.25'], 
-    http_req_duration: ['p(90)<6800'],
-    status_code_rate: ['rate>0.75'],
-  },
-  stages: [
-    { duration: '30s', target: 7 },
-    { duration: '2m', target: 92 },
-    { duration: '1m', target: 0 } 
-  ]
+	thresholds: {
+		http_req_failed: ['rate<0.25'],
+		get_contacts: ['p(99)<500'],
+		content_OK: ['rate>0.75']
+	},
+	stages: [
+		{ duration: '10s', target: 2 },
+		{ duration: '10s', target: 4 },
+		{ duration: '10s', target: 6 }
+	]
 };
 
 export function handleSummary(data) {
-  return {
-    './src/output/index.html': htmlReport(data),
-    stdout: textSummary(data, { indent: ' ', enableColors: true })
-  };
+	return {
+		'./src/output/index.html': htmlReport(data),
+		stdout: textSummary(data, { indent: ' ', enableColors: true })
+	};
 }
 
 export default function () {
-  // --- ALTERAÇÃO: NOVA API (CROCODILE API DO K6) ---
-  const baseUrl = 'https://test-api.k6.io';
-  const endpoint = '/public/crocodiles/'; // Endpoint público que lista crocodilos
-  
-  const params = {
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  };
+	const baseUrl = 'https://reqres.in';
+	const endpoint = '/api/users?page=2';
 
-  const res = http.get(`${baseUrl}${endpoint}`, params);
+	const params = {
+		headers: {
+			'Content-Type': 'application/json'
+		}
+	};
 
-  getDurationTrend.add(res.timings.duration);
-  
-  // Debug: Loga erro apenas se falhar
-  if (res.status !== 200) {
-      console.log(`Erro na Crocodile API: Status ${res.status}`); 
-  }
+	const OK = 200;
 
-  const isStatus200 = res.status === 200;
-  statusCodeRate.add(isStatus200);
+	const res = http.get(`${baseUrl}${endpoint}`, params);
 
-  check(res, {
-    'GET Status is 200': () => isStatus200
-  });
+	getContactsDuration.add(res.timings.duration);
+	RateContentOK.add(res.status === OK);
 
-  // Sleep de 1 segundo é suficiente para essa API (Pacing realista)
-  sleep(1); 
+	check(res, {
+		'GET /api/users - Status 200': () => res.status === OK
+	});
+
+	sleep(5);
 }
